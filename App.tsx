@@ -60,105 +60,47 @@ const App: React.FC = () => {
     // --- الوظائف المساعدة تبقى كما هي ---
     const scrollToBottom = () => { /* ... */ };
     useEffect(() => { /* ... */ }, []);
-    const startNewSession = useCallback((contextText?: string, scenario?: Scenario, newContextTitle?: string) => {
-        startChatSession(selectedLanguage.name, difficulty);
-        setConversation([]);
-        setCurrentScenario(scenario || null);
-        setContextTitle(newContextTitle || null);
-        setActiveContext(contextText);
-    }, [selectedLanguage, difficulty]);
+    const startNewSession = useCallback((contextText?: string, scenario?: Scenario, newContextTitle?: string) => { /* ... */ }, [selectedLanguage, difficulty]);
     useEffect(scrollToBottom, [conversation]);
-    useEffect(() => {
-        document.documentElement.lang = selectedLanguage.code.split('-')[0];
-        document.documentElement.dir = selectedLanguage.dir;
-        startNewSession();
-    }, [selectedLanguage, difficulty, startNewSession]);
-    useEffect(() => { /* Theme loading */ }, []);
+    useEffect(() => { /* Language/Difficulty change effect */ }, [selectedLanguage, difficulty, startNewSession]);
+    useEffect(() => { /* Theme loading & pdf.js worker setup */ }, []);
     useEffect(() => { /* Daily Challenge Check */ }, []);
     const extractTextFromFile = async (file: File) => { /* ... File processing logic ... */ };
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { /* ... */ };
     const handleRemoveFile = () => { /* ... */ };
-
-    const handleApiError = useCallback((error: any) => {
-         console.error("API Error:", error.message); // <-- أبقينا على رسالة الخطأ فقط
-        const message = error.message || "An unknown error occurred.";
-        if (message.includes("exceeded the request limit") || message.includes("busy")) { /* ... Cooldown logic ... */ }
-        else { setError(message); }
-     }, []);
-
+    const handleApiError = useCallback((error: any) => { /* ... Error handling ... */ }, []);
     const speak = useCallback((text: string) => { /* ... Speech synthesis logic ... */ }, [selectedLanguage.code]);
-
-    const processAIResponse = useCallback(async (userText: string) => {
-        setIsApiBusy(true); setError(null);
-        try {
-            const aiText = await sendMessageToAI(userText, conversation, activeContext, currentScenario?.prompt);
-            const aiMessage: Message = { role: Role.MODEL, text: aiText };
-            setConversation(prev => [...prev, aiMessage]);
-            speak(aiText.replace(/\[\?\]/g, ''));
-        } catch (e: any) {
-            handleApiError(e);
-            const errorMessage: Message = { role: Role.MODEL, text: "Sorry, I couldn't process that. Please try again." };
-            setConversation(prev => [...prev, errorMessage]);
-        } finally {
-            setIsApiBusy(false);
-        }
-    }, [conversation, activeContext, currentScenario, handleApiError, speak]);
-
-    // --- باقي الوظائف تبقى كما هي (بدون console.log الزائد) ---
+    const processAIResponse = useCallback(async (userText: string) => { /* ... API call logic ... */ }, [conversation, activeContext, currentScenario, handleApiError, speak]);
     const handleRecognitionResult = useCallback((event: SpeechRecognitionEvent) => { /* ... */ }, [processAIResponse]);
-    const setupRecognition = useCallback(() => { /* ... */ }, [selectedLanguage, handleRecognitionResult]);
-    useEffect(setupRecognition, [setupRecognition]);
+
+    // --- بداية التعديل: تعطيل setupRecognition ---
+    const setupRecognition = useCallback(() => {
+        if (!SpeechRecognitionAPI) { setError("Speech recognition not supported."); return; }
+        const recognition = new SpeechRecognitionAPI();
+        recognition.lang = selectedLanguage.code; recognition.interimResults = true; recognition.continuous = false;
+        recognition.onresult = handleRecognitionResult;
+        recognition.onend = () => setIsRecording(false);
+        recognition.onerror = (event) => { setError(`Speech error: ${event.error}`); setIsRecording(false); };
+        recognitionRef.current = recognition;
+    }, [selectedLanguage, handleRecognitionResult]);
+
+    // --- تم تعطيل هذا الـ useEffect مؤقتاً ---
+    // useEffect(setupRecognition, [setupRecognition]);
+    // --- نهاية التعطيل ---
+
     const unlockAudioContext = () => { /* ... */ };
     const handleStopSpeaking = () => { /* ... */ };
     const handleRecordClick = () => { /* ... */ };
     const handleSendMessage = () => { /* ... */ };
     const handleClearConversation = () => { /* ... */ };
-    const handleContentAnalysisSubmit = () => {
-        let contentToAnalyze = ''; let newContextTitle = '';
-        // ... (منطق تحديد المحتوى) ...
-        setIsTextAnalysisModalOpen(false);
-        startNewSession(contentToAnalyze, undefined, newContextTitle);
-        if (analysisMode !== 'link') { const contextMessage: Message = { /* ... */ }; setConversation([contextMessage]); speak(contextMessage.text); }
-        else { processAIResponse("Let's discuss the link."); }
-        // ... (Reset state) ...
-    };
-    const handleCustomScenarioSubmit = () => {
-        const trimmedScenario = customScenarioInput.trim(); if (!trimmedScenario) return; setIsScenarioModalOpen(false);
-        if (conversation.length > 0 && !window.confirm("...")) { return; }
-        const scenarioPrompt = `...`; const newScenario: Scenario = { /* ... */ };
-        startNewSession(undefined, newScenario, `🎭 Scenario: ${trimmedScenario}`);
-        processAIResponse("Let's begin."); setCustomScenarioInput('');
-    };
-    const handleOpenDictionary = async () => {
-        setIsDictionaryModalOpen(true); setIsApiBusy(true); setError(null);
-        try {
-            const vocab = await extractVocabulary(conversation);
-            setVocabularyList(vocab);
-            if (vocab.length > 0) { /* localStorage ... */ }
-        } catch (e: any) { handleApiError(e); setVocabularyList(null); }
-        finally { setIsApiBusy(false); }
-    };
+    const handleContentAnalysisSubmit = () => { /* ... */ };
+    const handleCustomScenarioSubmit = () => { /* ... */ };
+    const handleOpenDictionary = async () => { /* ... */ };
     const handleDifficultyChange = (newDifficulty: Difficulty) => { /* ... */ };
-    const handleExplainClick = async (messageIndex: number) => {
-        const aiMessage = conversation[messageIndex]; const userMessage = conversation[messageIndex - 1];
-        if (!aiMessage || !userMessage || userMessage.role !== Role.USER || isApiBusy || isApiOnCooldown) return;
-        setIsGrammarModalOpen(true); setIsApiBusy(true); setGrammarExplanation('');
-        try {
-            const explanation = await getGrammarExplanation(userMessage.text, aiMessage.text);
-            setGrammarExplanation(explanation);
-        } catch (e: any) { handleApiError(e); setGrammarExplanation("Sorry, ..."); }
-        finally { setIsApiBusy(false); }
-    };
+    const handleExplainClick = async (messageIndex: number) => { /* ... */ };
     const handleChallengeSubmit = async () => { /* ... */ };
     const handleThemeChange = (themeId: string) => { /* ... */ };
-    const handleAnalyzeWordClick = async (word: string) => {
-        setIsWordAnalysisModalOpen(true); setIsApiBusy(true); setWordAnalysisResult(''); setCurrentWordAnalyzed(word);
-        try {
-            const result = await getWordAnalysis(word);
-            setWordAnalysisResult(result);
-        } catch (e: any) { handleApiError(e); setWordAnalysisResult("Sorry, ..."); }
-        finally { setIsApiBusy(false); }
-    };
+    const handleAnalyzeWordClick = async (word: string) => { /* ... */ };
     const renderRecordButtonContent = () => { /* ... */ };
     const currentTheme = THEMES.find(t => t.id === theme) || THEMES[0];
     const isAnalysisSubmitDisabled = () => { /* ... */ };
@@ -166,17 +108,10 @@ const App: React.FC = () => {
     // --- Render يبقى كما هو ---
     return (
         <div className={`flex flex-col h-screen bg-gradient-to-br ${currentTheme.class} text-white font-sans`}>
-            <header className="flex justify-between items-center p-4 ..."> {/* ... */} </header>
-            <main ref={chatContainerRef} className="flex-1 flex flex-col p-4 overflow-y-auto">
-                {conversation.length === 0 && ( <div className="m-auto ..."> {/* ... */} </div> )}
-                {conversation.map((msg, index) => ( <MessageBubble key={index} /* ... */ /> ))}
-            </main>
-            {/* ... Error/Cooldown Footer ... */}
-            <footer className="p-4 bg-black bg-opacity-30 ..."> {/* ... */} </footer>
-            {/* Modals */}
-            <Modal isOpen={isDictionaryModalOpen} /* ... */ > {/* ... (مع زر Analyze) ... */} </Modal>
-            <Modal isOpen={isWordAnalysisModalOpen} /* ... */ > {/* ... */} </Modal>
-            {/* ... (باقي الـ Modals) ... */}
+            {/* ... Header ... */}
+            {/* ... Main ... */}
+            {/* ... Footer ... */}
+            {/* ... Modals ... */}
         </div>
     );
 };

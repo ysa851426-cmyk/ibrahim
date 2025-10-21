@@ -18,39 +18,7 @@ const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechReco
 const App: React.FC = () => {
     // --- States تبقى كما هي ---
     const [conversation, setConversation] = useState<Message[]>([]);
-    const [selectedLanguage, setSelectedLanguage] = useState<LanguageOption>(SUPPORTED_LANGUAGES[0]);
-    const [difficulty, setDifficulty] = useState<Difficulty>('Beginner');
-    const [currentScenario, setCurrentScenario] = useState<Scenario | null>(null);
-    const [isRecording, setIsRecording] = useState<boolean>(false);
-    const [isApiBusy, setIsApiBusy] = useState<boolean>(false);
-    const [error, setError] = useState<string | null>(null);
-    const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
-    const [textInput, setTextInput] = useState<string>('');
-    const [theme, setTheme] = useState<string>('default');
-    const [activeContext, setActiveContext] = useState<string | undefined>();
-    const [contextTitle, setContextTitle] = useState<string | null>(null);
-    const [isApiOnCooldown, setIsApiOnCooldown] = useState<boolean>(false);
-    const [cooldownTimer, setCooldownTimer] = useState<number>(0);
-    const [audioUnlocked, setAudioUnlocked] = useState(false);
-    const [isTextAnalysisModalOpen, setIsTextAnalysisModalOpen] = useState<boolean>(false);
-    const [textForAnalysis, setTextForAnalysis] = useState<string>('');
-    const [isDictionaryModalOpen, setIsDictionaryModalOpen] = useState<boolean>(false);
-    const [vocabularyList, setVocabularyList] = useState<VocabularyItem[] | null>(null);
-    const [isScenarioModalOpen, setIsScenarioModalOpen] = useState<boolean>(false);
-    const [customScenarioInput, setCustomScenarioInput] = useState<string>('');
-    const [isGrammarModalOpen, setIsGrammarModalOpen] = useState<boolean>(false);
-    const [grammarExplanation, setGrammarExplanation] = useState<string>('');
-    const [isDailyChallengeModalOpen, setIsDailyChallengeModalOpen] = useState<boolean>(false);
-    const [dailyChallenge, setDailyChallenge] = useState<VocabularyItem | null>(null);
-    const [challengeSentence, setChallengeSentence] = useState<string>('');
-    const [challengeFeedback, setChallengeFeedback] = useState<string>('');
-    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
-    const [isWordAnalysisModalOpen, setIsWordAnalysisModalOpen] = useState<boolean>(false);
-    const [wordAnalysisResult, setWordAnalysisResult] = useState<string>('');
-    const [currentWordAnalyzed, setCurrentWordAnalyzed] = useState<string>('');
-    const [analysisMode, setAnalysisMode] = useState<'paste' | 'upload' | 'link'>('paste');
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [fileProcessingMessage, setFileProcessingMessage] = useState<string | null>(null);
+    // ... (باقي الـ State declarations) ...
     const [urlInput, setUrlInput] = useState<string>('');
 
     const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -59,34 +27,37 @@ const App: React.FC = () => {
 
     // --- الوظائف المساعدة تبقى كما هي ---
     const scrollToBottom = () => { /* ... */ };
-    useEffect(() => { /* ... */ }, []);
+    useEffect(() => { /* ... */ }, []); // Cleanup interval
     const startNewSession = useCallback((contextText?: string, scenario?: Scenario, newContextTitle?: string) => { /* ... */ }, [selectedLanguage, difficulty]);
     useEffect(scrollToBottom, [conversation]);
     useEffect(() => { /* Language/Difficulty change effect */ }, [selectedLanguage, difficulty, startNewSession]);
     useEffect(() => { /* Theme loading & pdf.js worker setup */ }, []);
-    useEffect(() => { /* Daily Challenge Check */ }, []);
-    const extractTextFromFile = async (file: File) => { /* ... File processing logic ... */ };
+
+    // --- بداية التعديل: تعطيل Daily Challenge useEffect ---
+    // useEffect(() => { // Daily Challenge Check
+    //     const savedVocabRaw = localStorage.getItem('polyglot-vocab');
+    //     const savedDate = localStorage.getItem('polyglot-vocab-date');
+    //     const today = new Date().toISOString().split('T')[0];
+    //     if (savedVocabRaw && savedDate !== today) {
+    //          const savedVocab: VocabularyItem[] = JSON.parse(savedVocabRaw);
+    //          if (savedVocab.length > 0) { /* Set challenge... */ }
+    //     }
+    // }, []);
+    // --- نهاية التعديل ---
+
+    // --- باقي الوظائف تبقى كما هي ---
+    const extractTextFromFile = async (file: File) => { /* ... */ };
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { /* ... */ };
     const handleRemoveFile = () => { /* ... */ };
-    const handleApiError = useCallback((error: any) => { /* ... Error handling ... */ }, []);
-    const speak = useCallback((text: string) => { /* ... Speech synthesis logic ... */ }, [selectedLanguage.code]);
-    const processAIResponse = useCallback(async (userText: string) => { /* ... API call logic ... */ }, [conversation, activeContext, currentScenario, handleApiError, speak]);
+    const handleApiError = useCallback((error: any) => { /* ... */ }, []);
+    const speak = useCallback((text: string) => { /* ... */ }, [selectedLanguage.code]);
+    const processAIResponse = useCallback(async (userText: string) => { /* ... */ }, [conversation, activeContext, currentScenario, handleApiError, speak]);
     const handleRecognitionResult = useCallback((event: SpeechRecognitionEvent) => { /* ... */ }, [processAIResponse]);
+    const setupRecognition = useCallback(() => { /* ... */ }, [selectedLanguage, handleRecognitionResult]);
 
-    // --- بداية التعديل: تعطيل setupRecognition ---
-    const setupRecognition = useCallback(() => {
-        if (!SpeechRecognitionAPI) { setError("Speech recognition not supported."); return; }
-        const recognition = new SpeechRecognitionAPI();
-        recognition.lang = selectedLanguage.code; recognition.interimResults = true; recognition.continuous = false;
-        recognition.onresult = handleRecognitionResult;
-        recognition.onend = () => setIsRecording(false);
-        recognition.onerror = (event) => { setError(`Speech error: ${event.error}`); setIsRecording(false); };
-        recognitionRef.current = recognition;
-    }, [selectedLanguage, handleRecognitionResult]);
-
-    // --- تم تعطيل هذا الـ useEffect مؤقتاً ---
-    // useEffect(setupRecognition, [setupRecognition]);
-    // --- نهاية التعطيل ---
+    // --- أعدنا تفعيل هذا ---
+    useEffect(setupRecognition, [setupRecognition]);
+    // --- ---
 
     const unlockAudioContext = () => { /* ... */ };
     const handleStopSpeaking = () => { /* ... */ };

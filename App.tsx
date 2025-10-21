@@ -18,7 +18,39 @@ const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechReco
 const App: React.FC = () => {
     // --- States تبقى كما هي ---
     const [conversation, setConversation] = useState<Message[]>([]);
-    // ... (باقي الـ State declarations) ...
+    const [selectedLanguage, setSelectedLanguage] = useState<LanguageOption>(SUPPORTED_LANGUAGES[0]);
+    const [difficulty, setDifficulty] = useState<Difficulty>('Beginner');
+    const [currentScenario, setCurrentScenario] = useState<Scenario | null>(null);
+    const [isRecording, setIsRecording] = useState<boolean>(false);
+    const [isApiBusy, setIsApiBusy] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+    const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+    const [textInput, setTextInput] = useState<string>('');
+    const [theme, setTheme] = useState<string>('default');
+    const [activeContext, setActiveContext] = useState<string | undefined>();
+    const [contextTitle, setContextTitle] = useState<string | null>(null);
+    const [isApiOnCooldown, setIsApiOnCooldown] = useState<boolean>(false);
+    const [cooldownTimer, setCooldownTimer] = useState<number>(0);
+    const [audioUnlocked, setAudioUnlocked] = useState(false);
+    const [isTextAnalysisModalOpen, setIsTextAnalysisModalOpen] = useState<boolean>(false);
+    const [textForAnalysis, setTextForAnalysis] = useState<string>('');
+    const [isDictionaryModalOpen, setIsDictionaryModalOpen] = useState<boolean>(false);
+    const [vocabularyList, setVocabularyList] = useState<VocabularyItem[] | null>(null);
+    const [isScenarioModalOpen, setIsScenarioModalOpen] = useState<boolean>(false);
+    const [customScenarioInput, setCustomScenarioInput] = useState<string>('');
+    const [isGrammarModalOpen, setIsGrammarModalOpen] = useState<boolean>(false);
+    const [grammarExplanation, setGrammarExplanation] = useState<string>('');
+    const [isDailyChallengeModalOpen, setIsDailyChallengeModalOpen] = useState<boolean>(false);
+    const [dailyChallenge, setDailyChallenge] = useState<VocabularyItem | null>(null);
+    const [challengeSentence, setChallengeSentence] = useState<string>('');
+    const [challengeFeedback, setChallengeFeedback] = useState<string>('');
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+    const [isWordAnalysisModalOpen, setIsWordAnalysisModalOpen] = useState<boolean>(false);
+    const [wordAnalysisResult, setWordAnalysisResult] = useState<string>('');
+    const [currentWordAnalyzed, setCurrentWordAnalyzed] = useState<string>('');
+    const [analysisMode, setAnalysisMode] = useState<'paste' | 'upload' | 'link'>('paste');
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [fileProcessingMessage, setFileProcessingMessage] = useState<string | null>(null);
     const [urlInput, setUrlInput] = useState<string>('');
 
     const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -32,20 +64,7 @@ const App: React.FC = () => {
     useEffect(scrollToBottom, [conversation]);
     useEffect(() => { /* Language/Difficulty change effect */ }, [selectedLanguage, difficulty, startNewSession]);
     useEffect(() => { /* Theme loading & pdf.js worker setup */ }, []);
-
-    // --- بداية التعديل: تعطيل Daily Challenge useEffect ---
-    // useEffect(() => { // Daily Challenge Check
-    //     const savedVocabRaw = localStorage.getItem('polyglot-vocab');
-    //     const savedDate = localStorage.getItem('polyglot-vocab-date');
-    //     const today = new Date().toISOString().split('T')[0];
-    //     if (savedVocabRaw && savedDate !== today) {
-    //          const savedVocab: VocabularyItem[] = JSON.parse(savedVocabRaw);
-    //          if (savedVocab.length > 0) { /* Set challenge... */ }
-    //     }
-    // }, []);
-    // --- نهاية التعديل ---
-
-    // --- باقي الوظائف تبقى كما هي ---
+    useEffect(() => { /* Daily Challenge Check */ }, []);
     const extractTextFromFile = async (file: File) => { /* ... */ };
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { /* ... */ };
     const handleRemoveFile = () => { /* ... */ };
@@ -54,11 +73,7 @@ const App: React.FC = () => {
     const processAIResponse = useCallback(async (userText: string) => { /* ... */ }, [conversation, activeContext, currentScenario, handleApiError, speak]);
     const handleRecognitionResult = useCallback((event: SpeechRecognitionEvent) => { /* ... */ }, [processAIResponse]);
     const setupRecognition = useCallback(() => { /* ... */ }, [selectedLanguage, handleRecognitionResult]);
-
-    // --- أعدنا تفعيل هذا ---
     useEffect(setupRecognition, [setupRecognition]);
-    // --- ---
-
     const unlockAudioContext = () => { /* ... */ };
     const handleStopSpeaking = () => { /* ... */ };
     const handleRecordClick = () => { /* ... */ };
@@ -68,7 +83,45 @@ const App: React.FC = () => {
     const handleCustomScenarioSubmit = () => { /* ... */ };
     const handleOpenDictionary = async () => { /* ... */ };
     const handleDifficultyChange = (newDifficulty: Difficulty) => { /* ... */ };
-    const handleExplainClick = async (messageIndex: number) => { /* ... */ };
+
+    // --- [ بداية الإصلاح النهائي ] ---
+    const handleExplainClick = async (messageIndex: number) => {
+        const aiMessage = conversation[messageIndex];
+        if (!aiMessage || isApiBusy || isApiOnCooldown) {
+            console.warn("Explain click condition not met: No AI message or API is busy.");
+            return;
+        }
+
+        // البحث للخلف عن آخر رسالة للمستخدم
+        let userMessage: Message | undefined;
+        for (let i = messageIndex - 1; i >= 0; i--) {
+            if (conversation[i].role === Role.USER) {
+                userMessage = conversation[i];
+                break; // وجدنا الرسالة، أوقف البحث
+            }
+        }
+
+        // إذا لم نجد رسالة مستخدم سابقة، لا تفعل شيئاً
+        if (!userMessage) {
+            console.warn("Explain click condition not met: Could not find a preceding user message.");
+            return;
+        }
+        
+        setIsGrammarModalOpen(true);
+        setIsApiBusy(true);
+        setGrammarExplanation('');
+        try {
+            const explanation = await getGrammarExplanation(userMessage.text, aiMessage.text);
+            setGrammarExplanation(explanation);
+        } catch (e: any) {
+             handleApiError(e);
+            setGrammarExplanation("Sorry, I couldn't get an explanation at this time.");
+        } finally {
+            setIsApiBusy(false);
+        }
+    };
+    // --- [ نهاية الإصلاح النهائي ] ---
+
     const handleChallengeSubmit = async () => { /* ... */ };
     const handleThemeChange = (themeId: string) => { /* ... */ };
     const handleAnalyzeWordClick = async (word: string) => { /* ... */ };

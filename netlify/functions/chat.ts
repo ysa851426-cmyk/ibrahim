@@ -1,7 +1,8 @@
 // --- هذا الملف: netlify/functions/chat.ts ---
 // هذا الكود سيعمل على خادم Netlify (آمن)
 
-import { GoogleGenAI, Content } from "@google/genai";
+// --- [ تعديل 1: إضافة 'Type' ] ---
+import { GoogleGenAI, Content, Type } from "@google/genai";
 
 // --- 1. إدارة المفاتيح (Key Management) ---
 let apiKeys: string[] = [];
@@ -10,8 +11,6 @@ let keysLoaded = false;
 
 const loadApiKeys = () => {
     if (keysLoaded) return;
-    // نقرأ المفاتيح من متغيرات Netlify الآمنة
-    // لاحظ: الاسم هنا GEMINI_KEYS (بدون VITE_)
     apiKeys = (process.env.GEMINI_KEYS || "")
         .split(',')
         .filter(Boolean);
@@ -27,7 +26,7 @@ const loadApiKeys = () => {
 
 // --- 2. وظيفة الفشل الذكي (Failover Helper) ---
 const runAIGeneration = async (
-    task: (ai: GoogleGenAI) => Promise<string> // نعدل النوع ليُرجع string
+    task: (ai: GoogleGenAI) => Promise<string>
 ): Promise<string> => {
     loadApiKeys();
     if (apiKeys.length === 0) {
@@ -41,7 +40,6 @@ const runAIGeneration = async (
         try {
             const ai = new GoogleGenAI({ apiKey: keyToTry });
             const result = await task(ai);
-            // console.log(`API Key ${currentKeyIndex} succeeded.`);
             return result;
 
         } catch (error: any) {
@@ -57,46 +55,66 @@ const runAIGeneration = async (
 };
 
 // --- 3. المعالج الرئيسي (The Function Handler) ---
-// هذا هو ما يستدعيه تطبيق React
 export const handler = async (event: any) => {
     
-    // الأمان: التأكد أن الطلب هو POST
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
 
     try {
-        // 1. قراءة البيانات القادمة من تطبيق React
         const body = JSON.parse(event.body || "{}");
-        
-        // استخراج البيانات المطلوبة
         const { type, payload } = body;
         
         let resultText: string;
 
-        // 2. تحديد المهمة المطلوبة
         if (type === 'sendMessage') {
             const { message, history, systemInstruction } = payload;
             resultText = await runAIGeneration(async (ai) => {
                 const chat = ai.chats.create({
                     model: 'gemini-2.5-flash',
                     config: { systemInstruction },
-                    history: history as Content[] // نثق بالنوع القادم
+                    history: history as Content[]
                 });
                 const result = await chat.sendMessage({ message });
                 return result.text;
             });
 
+        // --- [ تعديل 2: تحديث القاموس ليكون صارماً ] ---
         } else if (type === 'extractVocabulary') {
             const { conversationText } = payload;
             resultText = await runAIGeneration(async (ai) => {
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-flash',
-                    contents: `From the following conversation, extract up to 10 key English vocabulary words. For each word, provide the word, up to 3 English synonyms, and all corresponding Arabic meanings. Focus on non-trivial words.\n\nConversation:\n${conversationText}`,
-                    config: { responseMimeType: "application/json" } // Schema غير مدعوم هنا، سنعتمد على JSON
+                    contents: `From the following conversation, extract up to 10 key English vocabulary words.
+Your task is to provide JSON. For each word:
+1.  Provide the English 'word'.
+2.  Provide up to 3 English 'synonyms' in an array.
+3.  Provide all corresponding 'arabicMeanings' in an array. This is a strict requirement.
+
+Conversation:
+${conversationText}`,
+                    
+                    // إعادة الـ Schema لإجبار الـ AI
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.ARRAY,
+                            description: "A list of key vocabulary words.",
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    word: { type: Type.STRING, description: "The vocabulary word in English." },
+                                    synonyms: { type: Type.ARRAY, description: "Up to 3 English synonyms.", items: { type: Type.STRING } },
+                                    arabicMeanings: { type: Type.ARRAY, description: "Meanings in Arabic.", items: { type: Type.STRING } }
+                                },
+                                required: ["word", "synonyms", "arabicMeanings"] // نجعلها مطلوبة
+                            }
+                        }
+                    }
                 });
                 return response.text;
             });
+        // --- [ نهاية التعديل ] ---
 
         } else if (type === 'getGrammarExplanation') {
             const { userSentence, aiCorrection } = payload;
@@ -122,14 +140,12 @@ export const handler = async (event: any) => {
             throw new Error('Invalid task type');
         }
 
-        // 3. إرجاع الرد الناجح إلى React
         return {
             statusCode: 200,
             body: JSON.stringify({ text: resultText })
         };
 
     } catch (error: any) {
-        // 4. إرجاع الخطأ إلى React
         return {
             statusCode: 500,
             body: JSON.stringify({ error: error.message })

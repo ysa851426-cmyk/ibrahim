@@ -1,50 +1,74 @@
+// --- ملف: components/MessageBubble.tsx ---
+
 import React from 'react';
 import { Message, Role } from '../types';
 
+// 1. تحديث الـ Props لتقبل وظيفة 'onPlayAudio'
 interface MessageBubbleProps {
-  message: Message;
-  messageIndex: number;
-  onExplainClick: (messageIndex: number) => void;
+    message: Message;
+    messageIndex: number;
+    onExplainClick: (index: number) => void;
+    onPlayAudio: (text: string) => void; // <-- الإضافة الجديدة
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message, messageIndex, onExplainClick }) => {
-  const isUser = message.role === Role.USER;
-  const hasExplainable = !isUser && message.text.includes('[?]');
+const MessageBubble: React.FC<MessageBubbleProps> = ({ message, messageIndex, onExplainClick, onPlayAudio }) => {
+    const isUser = message.role === Role.USER;
+    // التأكد من أن النص موجود قبل البحث فيه
+    const hasGrammarToken = message.text && message.text.includes('[?]');
 
-  const bubbleClasses = isUser
-    ? 'bg-sky-600 text-white self-end rounded-ss-2xl rounded-se-md rounded-es-2xl rounded-ee-md'
-    : 'bg-gray-700 text-gray-200 self-start rounded-se-2xl rounded-ss-md rounded-ee-2xl rounded-es-md';
+    // 2. وظيفة لتشغيل الصوت عند النقر
+    const handlePlayAudioClick = () => {
+        if (message.text) {
+            onPlayAudio(message.text.replace(/\[\?\]/g, ''));
+        }
+    };
 
-  const containerClasses = isUser ? 'justify-end' : 'justify-start';
+    // 3. وظيفة لشرح القاعدة
+    const handleExplainClick = () => {
+        onExplainClick(messageIndex);
+    };
 
-  const renderMessageContent = () => {
-    if (hasExplainable) {
-      const parts = message.text.split('[?]');
-      return (
-        <>
-          {parts[0]}
-          <button 
-            onClick={() => onExplainClick(messageIndex)} 
-            className="ml-2 px-2 py-0.5 rounded-full bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold transition-colors"
-            title="Explain Grammar Rule"
-            aria-label="Explain Grammar Rule"
-          >
-            <i className="fa-solid fa-question"></i>
-          </button>
-          {parts[1]}
-        </>
-      );
+    // التأكد من أن الرسالة موجودة قبل عرضها
+    if (!message.text) {
+        return null; // لا تعرض شيئاً إذا كانت الرسالة فارغة
     }
-    return message.text;
-  };
+    
+    const cleanText = message.text.replace(/\[\?\]/g, '');
 
-  return (
-    <div className={`flex w-full ${containerClasses}`}>
-      <div className={`max-w-xl md:max-w-2xl px-5 py-3 my-2 shadow-md ${bubbleClasses}`}>
-        <p className="text-base whitespace-pre-wrap">{renderMessageContent()}</p>
-      </div>
-    </div>
-  );
+    return (
+        <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
+            <div className={`p-4 rounded-2xl max-w-lg lg:max-w-xl ${isUser ? 'bg-sky-600 text-white rounded-br-none' : 'bg-gray-700 text-gray-100 rounded-bl-none'}`}>
+                <p className="whitespace-pre-wrap">{cleanText}</p>
+                
+                {/* --- [ 3. إضافة الأزرار هنا ] --- */}
+                {!isUser && (
+                    <div className="flex items-center mt-2 pt-2 border-t border-gray-600 gap-4"> {/* زدت الـ gap */}
+                        
+                        {/* زر تشغيل الصوت (الحل الاحتياطي) */}
+                        <button 
+                            onClick={handlePlayAudioClick} 
+                            className="text-gray-400 hover:text-white transition-colors"
+                            title="Play audio"
+                        >
+                            <i className="fa-solid fa-volume-high"></i>
+                        </button>
+
+                        {/* زر شرح القاعدة */}
+                        {hasGrammarToken && (
+                            <button 
+                                onClick={handleExplainClick} 
+                                className="text-gray-400 hover:text-white transition-colors"
+                                title="Explain grammar"
+                            >
+                                <i className="fa-solid fa-book-open"></i>
+                            </button>
+                        )}
+                    </div>
+                )}
+                {/* --- نهاية الإضافة --- */}
+            </div>
+        </div>
+    );
 };
 
 export default MessageBubble;

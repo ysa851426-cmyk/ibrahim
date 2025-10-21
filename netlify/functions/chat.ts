@@ -1,4 +1,7 @@
 // --- هذا الملف: netlify/functions/chat.ts ---
+// هذا الكود سيعمل على خادم Netlify (آمن)
+
+// --- [ تعديل 1: إضافة 'Type' ] ---
 import { GoogleGenAI, Content, Type } from "@google/genai";
 
 // --- 1. إدارة المفاتيح (Key Management) ---
@@ -76,6 +79,7 @@ export const handler = async (event: any) => {
                 return result.text;
             });
 
+        // --- [ تعديل 2: تحديث القاموس ليكون صارماً ] ---
         } else if (type === 'extractVocabulary') {
             const { conversationText } = payload;
             resultText = await runAIGeneration(async (ai) => {
@@ -86,7 +90,11 @@ Your task is to provide JSON. For each word:
 1.  Provide the English 'word'.
 2.  Provide up to 3 English 'synonyms' in an array.
 3.  Provide all corresponding 'arabicMeanings' in an array. This is a strict requirement.
-Conversation:\n${conversationText}`,
+
+Conversation:
+${conversationText}`,
+                    
+                    // إعادة الـ Schema لإجبار الـ AI
                     config: {
                         responseMimeType: "application/json",
                         responseSchema: {
@@ -99,13 +107,14 @@ Conversation:\n${conversationText}`,
                                     synonyms: { type: Type.ARRAY, description: "Up to 3 English synonyms.", items: { type: Type.STRING } },
                                     arabicMeanings: { type: Type.ARRAY, description: "Meanings in Arabic.", items: { type: Type.STRING } }
                                 },
-                                required: ["word", "synonyms", "arabicMeanings"]
+                                required: ["word", "synonyms", "arabicMeanings"] // نجعلها مطلوبة
                             }
                         }
                     }
                 });
                 return response.text;
             });
+        // --- [ نهاية التعديل ] ---
 
         } else if (type === 'getGrammarExplanation') {
             const { userSentence, aiCorrection } = payload;
@@ -126,24 +135,6 @@ Conversation:\n${conversationText}`,
                 });
                 return response.text;
             });
-
-        // --- [ الإضافة الجديدة هنا ] ---
-        } else if (type === 'getWordAnalysis') {
-            const { word } = payload;
-            resultText = await runAIGeneration(async (ai) => {
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    // هذا هو الأمر (Prompt) الجديد لميزتك
-                    contents: `Provide a simple analysis for the English word "${word}".
-Identify all its possible types (e.g., noun, verb, adjective, adverb).
-For each type, provide:
-1.  A simple definition in English.
-2.  One clear example sentence.
-Format the response clearly using Markdown (e.g., use headings like "As an Adjective:" or "As a Noun:").`,
-                });
-                return response.text;
-            });
-        // --- [ نهاية الإضافة ] ---
 
         } else {
             throw new Error('Invalid task type');

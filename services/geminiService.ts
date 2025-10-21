@@ -1,8 +1,12 @@
 // --- هذا الملف: services/geminiService.ts ---
+// هذا الكود يعمل في المتصفح (غير آمن)
+
 import { Message, Role, VocabularyItem, Difficulty } from '../types';
 
+// الرابط السري للـ Function الآمنة
 const API_ENDPOINT = '/.netlify/functions/chat';
 
+// --- وظيفة مساعدة لإرسال الطلبات إلى "الخلفية" ---
 const callSecureFunction = async (type: string, payload: any): Promise<string> => {
     try {
         const response = await fetch(API_ENDPOINT, {
@@ -14,9 +18,11 @@ const callSecureFunction = async (type: string, payload: any): Promise<string> =
         const data = await response.json();
 
         if (!response.ok) {
+            // إذا فشل الخادم، أظهر الخطأ
             throw new Error(data.error || "An unknown server error occurred.");
         }
         
+        // إرجاع النص الناجح
         return data.text;
 
     } catch (error: any) {
@@ -26,8 +32,9 @@ const callSecureFunction = async (type: string, payload: any): Promise<string> =
 }
 
 // --- وظيفة getSystemInstruction تبقى كما هي ---
+// (لأن React ما زال يحتاج لبناء التعليمات)
 const getSystemInstruction = (languageName: string, difficulty: Difficulty, contextText?: string, scenarioPrompt?: string) => {
-    // ... (نفس الكود الأصلي، لا تغيير) ...
+    // ... (انسخ نفس الكود الأصلي لوظيفة getSystemInstruction بالكامل هنا) ...
     
     let baseInstruction = `You are Poly, a friendly and encouraging language tutor. The user wants to learn ${languageName}. Your primary role is to have a natural conversation with them in ${languageName}.
 - Your responses MUST be primarily in ${languageName}.
@@ -58,11 +65,16 @@ ${contextText}
     return baseInstruction;
 }
 
-// --- الوظائف الرئيسية ---
+// --- الوظائف الرئيسية تم تعديلها (أبسط بكثير) ---
+
+// (ملاحظة: لقد أعدت 'history' هنا لأن App.tsx يرسلها، لكن الخدمة الجديدة لم تعد تدير السجل)
+// سنقوم بتعديل بسيط: App.tsx هو من يدير السجل
+let history: Message[] = []; // سجل مؤقت في الواجهة
 let currentLanguage: string = 'English';
 let currentDifficulty: Difficulty = 'Beginner';
 
 export const startChatSession = (languageName: string, difficulty: Difficulty): void => {
+    history = [];
     currentLanguage = languageName;
     currentDifficulty = difficulty;
     console.log("Chat session started (Frontend).");
@@ -70,7 +82,7 @@ export const startChatSession = (languageName: string, difficulty: Difficulty): 
 
 export const sendMessageToAI = async (
     message: string, 
-    currentHistory: Message[],
+    currentHistory: Message[], // App.tsx يجب أن يرسل السجل الحالي
     contextText?: string, 
     scenarioPrompt?: string
 ): Promise<string> => {
@@ -79,7 +91,7 @@ export const sendMessageToAI = async (
     
     const payload = {
         message: message,
-        history: currentHistory,
+        history: currentHistory, // إرسال السجل إلى الخلفية
         systemInstruction: instruction
     };
 
@@ -105,13 +117,3 @@ export const validateChallengeSentence = async (word: string, sentence: string):
     const payload = { word, sentence };
     return callSecureFunction('validateChallengeSentence', payload);
 };
-
-// --- [ الإضافة الجديدة هنا ] ---
-/**
- * يستدعي الخلفية للحصول على تحليل (أجزاء الكلام) للكلمة.
- */
-export const getWordAnalysis = async (word: string): Promise<string> => {
-    const payload = { word };
-    return callSecureFunction('getWordAnalysis', payload);
-};
-// --- [ نهاية الإضافة ] ---
